@@ -3,7 +3,7 @@
 * Use [MagFace+UNPG](https://github.com/jung-jun-uk/unpg) for face recognition
 * PyQt5 GUI
 ## Demo
-[![Demo Video](https://img.youtube.com/vi/1JNHOGNp0kU/maxresdefault.jpg)](https://www.youtube.com/watch?v=1JNHOGNp0kU)
+[![Demo Video](images/image.png)](https://www.youtube.com/watch?v=1JNHOGNp0kU)
 
 
 
