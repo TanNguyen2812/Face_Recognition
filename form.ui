@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Widget</class>
+ <widget class="QWidget" name="Widget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1259</width>
+    <height>688</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Widget</string>
+  </property>
+  <widget class="Line" name="line">
+   <property name="geometry">
+    <rect>
+     <x>767</x>
+     <y>380</y>
+     <width>481</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <property name="orientation">
+    <enum>Qt::Horizontal</enum>
+   </property>
+  </widget>
+  <widget class="Line" name="line_2">
+   <property name="geometry">
+    <rect>
+     <x>750</x>
+     <y>20</y>
+     <width>21</width>
+     <height>651</height>
+    </rect>
+   </property>
+   <property name="orientation">
+    <enum>Qt::Vertical</enum>
+   </property>
+  </widget>
+  <widget class="QLabel" name="Image1_label">
+   <property name="geometry">
+    <rect>
+     <x>30</x>
+     <y>30</y>
+     <width>681</width>
+     <height>621</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Image View 1</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="Image2_label">
+   <property name="geometry">
+    <rect>
+     <x>800</x>
+     <y>20</y>
+     <width>411</width>
+     <height>361</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Image View 2</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="open_webcam_btn">
+   <property name="geometry">
+    <rect>
+     <x>790</x>
+     <y>470</y>
+     <width>111</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Open Webcam</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="submit_btn">
+   <property name="geometry">
+    <rect>
+     <x>790</x>
+     <y>560</y>
+     <width>121</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Submit</string>
+   </property>
+  </widget>
+  <widget class="QRadioButton" name="data_collect_rbtn">
+   <property name="geometry">
+    <rect>
+     <x>810</x>
+     <y>420</y>
+     <width>110</width>
+     <height>24</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Data Collect</string>
+   </property>
+  </widget>
+  <widget class="QRadioButton" name="run_rbtn">
+   <property name="geometry">
+    <rect>
+     <x>970</x>
+     <y>420</y>
+     <width>110</width>
+     <height>24</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Run</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_3">
+   <property name="geometry">
+    <rect>
+     <x>940</x>
+     <y>470</y>
+     <width>71</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Name</string>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="name_text">
+   <property name="geometry">
+    <rect>
+     <x>1020</x>
+     <y>480</y>
+     <width>131</width>
+     <height>31</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="update_btn">
+   <property name="geometry">
+    <rect>
+     <x>940</x>
+     <y>560</y>
+     <width>121</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Update </string>
+   </property>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
