@@ -6,5 +6,5 @@
 [![Demo Video](images/image.png)](https://www.youtube.com/watch?v=1JNHOGNp0kU)
 
 # File ONNX Model
-[link text](https://drive.google.com/drive/folders/1pd3QNagID5KeHwOLr3C_LUB1Sc2CNsln?usp=sharing)
+[Link Download](https://drive.google.com/drive/folders/1pd3QNagID5KeHwOLr3C_LUB1Sc2CNsln?usp=sharing)
 
