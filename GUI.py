@@ -15,7 +15,8 @@ from PyQt5 import QtCore, uic
 from PyQt5.QtCore import QFile, Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import (QApplication, QLabel, QMainWindow, QRadioButton,
-                             QVBoxLayout, QWidget)
+                             QVBoxLayout, QWidget,QComboBox)
+
 
 from face_regconition_model import base_transform
 from Models.IResnet100_TRT import Iresnet100
@@ -26,7 +27,55 @@ from read_data import read_data
 
 FAS_LABEL = ["FAKE","REAL"]
 
-    
+def YUV_Mode(img):
+    img_yuv = cv2.cvtColor(img, cv2.COLOR_RGB2YUV)
+
+    # equalize the histogram of the Y channel
+    img_yuv[:,:,0] = cv2.equalizeHist(img_yuv[:,:,0])
+
+    # convert the YUV image back to RGB format
+    img_output = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2RGB)
+    return img_output
+
+def YCrBC_Mode(img):
+    #### YCrBC
+    ycrcb_img = cv2.cvtColor(img, cv2.COLOR_RGB2YCrCb)
+
+    # equalize the histogram of the Y channel
+    ycrcb_img[:, :, 0] = cv2.equalizeHist(ycrcb_img[:, :, 0])
+
+    # convert back to RGB color-space from YCrCb
+    equalized_img = cv2.cvtColor(ycrcb_img, cv2.COLOR_YCrCb2RGB)
+    return equalized_img
+
+#### Histogram
+def Hist_Eq(img):
+    for i in range(3):
+        img[:,:,i] = cv2.equalizeHist(img[:,:,i])
+    return img
+
+def CLAHE_Mode(img,grid=100):
+
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+
+    lab_planes = cv2.split(lab)
+
+    clahe = cv2.createCLAHE(clipLimit=2.0,tileGridSize=(grid,grid))
+
+    lab_planes[0] = clahe.apply(lab_planes[0])
+
+    lab = cv2.merge(lab_planes)
+
+    img = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+    return img
+
+
+OPTIONS = {'Historgram Eq':Hist_Eq,
+           'CLAHE':CLAHE_Mode,
+           'YCrBC':YCrBC_Mode,
+           'YUV':YUV_Mode
+           }
+
 
 def crop_face(image, output_dir, image_name):
     # Get the bounding box coordinates and dimensions
@@ -53,6 +102,7 @@ class CameraThread(QThread):
         self.mode = 'collect'
         self.stop_thread = False
         self.data = None
+        self.mode = None
 
 
     def run(self):
@@ -72,6 +122,8 @@ class CameraThread(QThread):
                     for bbox in bboxes:
                         x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                        if self.mode != 'None':
+                            crop = OPTIONS[self.mode](crop)
                         pred_score,image_tex = self.FAS_model.classify(crop)
                         image_tex = np.transpose(image_tex*255,(1,2,0)).copy()
                         image_tex = np.uint8(image_tex)
@@ -147,24 +199,29 @@ class MyMainWindow(QMainWindow):
         uic.loadUi(ui_file, self)
         ui_file.close()
 
+        self.comboBox:QComboBox
         self.msg_name.setText("Field must not be Empty")
         self.msg_name.hide()
         
-        self.detection_model = Retinaface_trt('./RetinaFace.trt')
+        self.detection_model = Retinaface_trt('./checkpoint/RetinaFace.trt')
         self.FAS_model = Meta_FAS()
 
         self.face_recognition_model = Iresnet100('./checkpoint/iresnet1100.trt')
         self.camera_thread = CameraThread(self.detection_model, self.face_recognition_model,self.FAS_model)
         self.is_run_mode = False
-        self.camera_thread.data = read_data('data')
         self.mtime = time.ctime(os.path.getmtime('data'))
 
         # Connect signal/slot for b uttons
+        self.comboBox.currentIndexChanged.connect(self.changedMode)
         self.open_webcam_btn.clicked.connect(self.toggle_camera_thread)
         self.data_collect_rbtn.toggled.connect(self.set_image_view)
         self.run_rbtn.toggled.connect(self.set_image_view)
         self.submit_btn.clicked.connect(self.save_face)
         self.update_btn.clicked.connect(self.update_data)
+
+    def changedMode(self):
+        self.camera_thread.mode = self.comboBox.currentText()
+        # print(self.comboBox.currentText())
 
     def update_data(self):
         if self.camera_thread is not None:
@@ -181,7 +238,9 @@ class MyMainWindow(QMainWindow):
 
     def toggle_camera_thread(self):
         if self.camera_thread is not None:
+            self.camera_thread.data = read_data('data')
             self.camera_thread.image_data.connect(self.update_image)
+            self.camera_thread.mode = self.comboBox.currentText()
             self.camera_thread.start()
             self.open_webcam_btn.setText("Close Webcam")
             
