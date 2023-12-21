@@ -4,6 +4,7 @@ import sys
 import time
 
 import cv2
+import faiss
 import numpy as np
 import pandas as pd
 import tensorrt
@@ -14,9 +15,9 @@ from PIL import Image
 from PyQt5 import QtCore, uic
 from PyQt5.QtCore import QFile, Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap
-from PyQt5.QtWidgets import (QApplication, QLabel, QMainWindow, QRadioButton,
-                             QVBoxLayout, QWidget,QComboBox)
-
+from PyQt5.QtWidgets import (QApplication, QComboBox, QLabel, QMainWindow,
+                             QRadioButton, QVBoxLayout, QWidget)
+from torch.nn.functional import cosine_similarity
 
 from face_regconition_model import base_transform
 from Models.IResnet100_TRT import Iresnet100
@@ -24,8 +25,7 @@ from Models.Meta_FAS_TRT import Meta_FAS
 from Models.RetinaFace import Retinaface_trt
 from read_data import read_data
 
-
-FAS_LABEL = ["FAKE","REAL"]
+DATA_DIR = './data'
 
 def YUV_Mode(img):
     img_yuv = cv2.cvtColor(img, cv2.COLOR_RGB2YUV)
@@ -58,17 +58,18 @@ def CLAHE_Mode(img,grid=100):
 
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
 
-    lab_planes = cv2.split(lab)
+    lab_planes0,lab_planes1,lab_planes2 = cv2.split(lab)
 
     clahe = cv2.createCLAHE(clipLimit=2.0,tileGridSize=(grid,grid))
 
-    lab_planes[0] = clahe.apply(lab_planes[0])
+    lab_planes0 = clahe.apply(lab_planes0)
 
-    lab = cv2.merge(lab_planes)
+    lab = cv2.merge([lab_planes0,lab_planes1,lab_planes2])
 
     img = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
     return img
 
+FAS_LABEL = ["FAKE","REAL"]
 
 OPTIONS = {'Historgram Eq':Hist_Eq,
            'CLAHE':CLAHE_Mode,
@@ -99,16 +100,19 @@ class CameraThread(QThread):
         self.face_detection_model = face_detection_model
         self.face_recognition_model = face_recognition_model
         self.FAS_model = FAS_model
-        self.mode = 'collect'
+        self.mode = None
         self.stop_thread = False
         self.data = None
-        self.mode = None
+        self.options = None
+        self.dbName = None
+        self.dbVector = faiss.IndexFlatIP(1024)
 
 
     def run(self):
-        self.face_detection_model.warmup('/images/image1.jpg')
+        # self.face_detection_model.warmup('/images/image1.jpg')
         self.capture = cv2.VideoCapture(0)
         # self.capture.set(cv2.CAP_PROP_EXPOSURE, -3)
+        self.capture.set(cv2.CAP_PROP_EXPOSURE, -5)
         while True:
             ret, frame = self.capture.read()
             if ret:
@@ -122,19 +126,20 @@ class CameraThread(QThread):
                     for bbox in bboxes:
                         x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                        if self.mode != 'None':
-                            crop = OPTIONS[self.mode](crop)
+                        if self.options != 'None':
+                            crop = OPTIONS[self.options](crop)
+                            frame = OPTIONS[self.options](frame)
                         pred_score,image_tex = self.FAS_model.classify(crop)
                         image_tex = np.transpose(image_tex*255,(1,2,0)).copy()
                         image_tex = np.uint8(image_tex)
-                        label = 1 if pred_score >=0.21 else 0
+                        label = 1 if pred_score >= 0.25 else 0
                         # print(pred_score)
                         cv2.putText(frame, FAS_LABEL[label], (x1, y1 - 50),
                                             cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
                         if label==0:continue
             
                         if self.save_file and self.mode == 'collect':
-                            path = os.path.join('data', self.save_dir)
+                            path = os.path.join(DATA_DIR, self.save_dir)
                             crop_face(crop, output_dir=path, image_name=str(self.image_name))
                             emb_vec = self.extract_featture(crop)
                             pd.to_pickle(emb_vec, os.path.join(path, str(self.image_name)+'.pkl'))
@@ -142,22 +147,14 @@ class CameraThread(QThread):
                             self.image_name += 1 # mode
 
                         if self.mode == 'run':
-                            emb_vec = self.extract_featture(crop)
-                            names = []
-                            distance = []
-                            if self.data:
-                                for name in self.data.keys():
-                                    feature = self.data[name]
-                                    cosine = np.dot(emb_vec,feature)/(norm(emb_vec)*norm(feature))
-                                    names.append(name)
-                                    distance.append(cosine)
-                                index_max = np.argmax(distance)
-                                id = names[index_max]
-                                if distance[index_max] > 0.3:
-                                    cv2.putText(frame, id+'{:.2}'.format(distance[index_max]), (x1, y1 - 20),
+                            if self.dbName:
+                                emb_vec = self.extract_featture(crop)
+                                score,index = self.search_id(emb_vec)
+                                if score > 0.3:
+                                    cv2.putText(frame, self.dbName[index]+' {:.2}'.format(score), (x1, y1 - 20),
                                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
                                 else:
-                                    cv2.putText(frame, 'Unknown'.format(distance[index_max]), (x1, y1 - 20),
+                                    cv2.putText(frame, 'Unknown '.format(score), (x1, y1 - 20),
                                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
                             else:
                                 cv2.putText(frame, 'Unknown', (x1, y1 - 20),
@@ -170,11 +167,10 @@ class CameraThread(QThread):
                 # Emit image data signal
                 self.image_data.emit([frame,image_tex])
 
-    def stop(self):
+    def stopThread(self):
         self.stop_thread = True
         if self.capture is not None:
             self.capture.release()
-
 
 
     def extract_featture(self, crop_face):
@@ -188,7 +184,16 @@ class CameraThread(QThread):
         emb_vec = np.concatenate([ft, hf_ft], axis=0)
         return emb_vec
 
-
+    def search_id(self,emb):
+        _,index = self.dbVector.search(emb[None],5)
+        index = index[index>=0]
+        data = torch.from_numpy(np.array([self.data[i] for i in index]))
+        cosine = cosine_similarity(torch.from_numpy(emb[None]),data)
+        value,ind = torch.max(cosine,0)
+        ind = index[ind.item()]
+        del data,index,cosine
+        return value.item(),ind
+        
 
 class MyMainWindow(QMainWindow):
     def __init__(self):
@@ -199,6 +204,8 @@ class MyMainWindow(QMainWindow):
         uic.loadUi(ui_file, self)
         ui_file.close()
 
+        self.run_rbtn:QRadioButton
+        self.data_collect_rbtn:QRadioButton
         self.comboBox:QComboBox
         self.msg_name.setText("Field must not be Empty")
         self.msg_name.hide()
@@ -208,24 +215,48 @@ class MyMainWindow(QMainWindow):
 
         self.face_recognition_model = Iresnet100('./checkpoint/iresnet1100.trt')
         self.camera_thread = CameraThread(self.detection_model, self.face_recognition_model,self.FAS_model)
-        self.is_run_mode = False
-        self.mtime = time.ctime(os.path.getmtime('data'))
-
+        self.thread_Run:bool = False
+        self.mtime = time.ctime(os.path.getmtime(DATA_DIR))
+        data = read_data(DATA_DIR)
+        self.dbName = list(data.keys())
+        self.dbVector = list(data.values())
+        self.camera_thread.dbName = self.dbName
+        self.camera_thread.data = self.dbVector
+        self.camera_thread.dbVector.add(np.array(self.dbVector))
         # Connect signal/slot for b uttons
         self.comboBox.currentIndexChanged.connect(self.changedMode)
         self.open_webcam_btn.clicked.connect(self.toggle_camera_thread)
         self.data_collect_rbtn.toggled.connect(self.set_image_view)
         self.run_rbtn.toggled.connect(self.set_image_view)
         self.submit_btn.clicked.connect(self.save_face)
-        self.update_btn.clicked.connect(self.update_data)
+        # self.update_btn.clicked.connect(self.update_data)
+        self.run_rbtn.setChecked(True)
+        self.data_collect_rbtn.setChecked(False)
+
+
+    def load_DB(self,force=False):
+        mtime = time.ctime(os.path.getmtime(DATA_DIR))
+        if self.mtime != mtime:
+            self.mtime = mtime
+            data = read_data(DATA_DIR)
+            self.dbName = list(data.keys())
+            self.dbVector = list(data.values())
+
+        if force or (self.mtime != mtime):
+            self.camera_thread.dbVector.reset()
+            self.camera_thread.dbName = self.dbName
+            self.camera_thread.data = self.dbVector
+            self.camera_thread.dbVector.add(np.array(self.dbVector))
+        
+
 
     def changedMode(self):
-        self.camera_thread.mode = self.comboBox.currentText()
+        self.camera_thread.options = self.comboBox.currentText()
         # print(self.comboBox.currentText())
 
     def update_data(self):
         if self.camera_thread is not None:
-            self.camera_thread.data = read_data('data')
+            self.camera_thread.data = read_data(DATA_DIR)
 
     def save_face(self):
         if self.camera_thread is not None:
@@ -237,17 +268,19 @@ class MyMainWindow(QMainWindow):
                 self.msg_name.hide()
 
     def toggle_camera_thread(self):
-        if self.camera_thread is not None:
-            self.camera_thread.data = read_data('data')
+        self.thread_Run = not self.thread_Run
+        if self.thread_Run:
+            # self.camera_thread.data = read_data(DATA_DIR)
             self.camera_thread.image_data.connect(self.update_image)
-            self.camera_thread.mode = self.comboBox.currentText()
+            self.camera_thread.options = self.comboBox.currentText()
             self.camera_thread.start()
             self.open_webcam_btn.setText("Close Webcam")
             
         else:
-            self.camera_thread.stop()
+            self.camera_thread.stopThread()
             self.camera_thread = None
             self.camera_thread = CameraThread(self.detection_model, self.face_recognition_model,self.FAS_model)
+            self.load_DB(True)
             self.open_webcam_btn.setText("Open Webcam")
 
 
@@ -258,9 +291,9 @@ class MyMainWindow(QMainWindow):
         else:
             self.is_run_mode = True
             self.camera_thread.mode = 'run'
-            mtime = time.ctime(os.path.getmtime('data'))
+            mtime = time.ctime(os.path.getmtime(DATA_DIR))
             if self.mtime != mtime: 
-               self.camera_thread.data = read_data('data')
+               self.load_DB()
 
 
     def update_image(self, np_image):
