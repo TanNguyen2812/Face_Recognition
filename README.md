@@ -3,7 +3,7 @@
 * Use [MagFace+UNPG](https://github.com/jung-jun-uk/unpg) for face recognition
 * Use [Meta Pattern FAS](https://github.com/RizhaoCai/MetaPattern_FAS) for Face Anti - Spoofing
 * PyQt5 GUI
-* Use Faiss for Indexing Vector in Database
+* Use [Faiss](https://github.com/facebookresearch/faiss) for Indexing Vector in Database
 ## Demo (Click to watch)
 [![Demo Video](images/image.png)](https://www.youtube.com/watch?v=1JNHOGNp0kU)
 
